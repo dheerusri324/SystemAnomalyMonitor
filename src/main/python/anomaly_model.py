@@ -41,8 +41,8 @@ def detect_anomaly(metrics):
         cpu_std = np.std(cpu_history)
         ram_mean = np.mean(ram_history)
         ram_std = np.std(ram_history)
-        cpu_anomaly = abs(cpu - cpu_mean) > 1 * cpu_std
-        ram_anomaly = abs(ram - ram_mean) > 1 * ram_std
+        cpu_anomaly = abs(cpu - cpu_mean) > 2 * cpu_std
+        ram_anomaly = abs(ram - ram_mean) > 2 * ram_std
     else:
         cpu_anomaly = ram_anomaly = False
 
