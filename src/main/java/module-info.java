@@ -5,7 +5,8 @@ module com.dheeraj.systemanomalymonitor {
     requires org.slf4j;
 
     requires org.controlsfx.controls; // if you added ControlsFX
-    requires org.kordamp.bootstrapfx.core; // if you added BootstrapFX
+    requires org.kordamp.bootstrapfx.core;
+    requires com.fasterxml.jackson.databind; // if you added BootstrapFX
 
     opens com.dheeraj.systemanomalymonitor to javafx.fxml;
     exports com.dheeraj.systemanomalymonitor;

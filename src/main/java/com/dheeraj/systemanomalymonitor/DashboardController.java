@@ -1,12 +1,12 @@
 package com.dheeraj.systemanomalymonitor;
 
-import javafx.animation.KeyFrame;
-import javafx.animation.Timeline;
+import javafx.animation.PauseTransition;
 import javafx.fxml.FXML;
-import javafx.scene.control.Label;
+import javafx.scene.control.*;
 import javafx.util.Duration;
-import java.lang.management.ManagementFactory;
-import com.sun.management.OperatingSystemMXBean;
+import java.io.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 public class DashboardController {
@@ -17,61 +17,120 @@ public class DashboardController {
     @FXML private Label netLabel;
     @FXML private Label procLabel;
     @FXML private Label statusLabel;
-    @FXML private Label alertSourceLabel;
+    @FXML private Label hintLabel;
+    @FXML private Button trueButton;
+    @FXML private Button falseButton;
 
-    private double prevRead = 0, prevWrite = 0, prevSent = 0, prevRecv = 0;
+    private Map<String, Object> lastMetrics;
+    private final File feedbackFile;
 
-    public void initialize() {
-        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(2), e -> updateMetrics()));
-        timeline.setCycleCount(Timeline.INDEFINITE);
-        timeline.play();
+    public DashboardController() {
+        feedbackFile = new File("src/main/python/feedback_log.csv");
+        try {
+            if (!feedbackFile.exists()) {
+                feedbackFile.getParentFile().mkdirs();
+                try (FileWriter w = new FileWriter(feedbackFile, true)) {
+                    w.write("timestamp,cpu,ram,disk_read,disk_write,net_sent,net_recv,proc,predicted_anomaly,user_label\n");
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("⚠️ Could not create feedback file: " + e.getMessage());
+        }
     }
 
-    private void updateMetrics() {
-        try {
-            // --- Get base system metrics ---
-            OperatingSystemMXBean os = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-            double cpu = os.getSystemCpuLoad() * 100;
-            double usedMem = (os.getTotalPhysicalMemorySize() - os.getFreePhysicalMemorySize()) / (1024.0 * 1024 * 1024);
-            double totalMem = os.getTotalPhysicalMemorySize() / (1024.0 * 1024 * 1024);
-            double ram = (usedMem / totalMem) * 100;
+    public void updateMetrics(Map<String, Object> metrics) {
+        this.lastMetrics = metrics;
 
-            // --- Disk & Network Stats (quick estimate) ---
-            long currRead = os.getCommittedVirtualMemorySize(); // placeholder
-            double diskRead = (currRead - prevRead) / (1024.0 * 1024);
-            prevRead = currRead;
+        double cpu = ((Number) metrics.getOrDefault("cpu", 0)).doubleValue();
+        double ram = ((Number) metrics.getOrDefault("ram", 0)).doubleValue();
+        double diskR = ((Number) metrics.getOrDefault("disk_read", 0)).doubleValue();
+        double diskW = ((Number) metrics.getOrDefault("disk_write", 0)).doubleValue();
+        double netS = ((Number) metrics.getOrDefault("net_sent", 0)).doubleValue();
+        double netR = ((Number) metrics.getOrDefault("net_recv", 0)).doubleValue();
+        int proc = ((Number) metrics.getOrDefault("proc", 0)).intValue();
+        boolean anomaly = (Boolean) metrics.getOrDefault("anomaly", false);
 
-            double netSent = Math.random() * 100; // placeholder for now
-            double netRecv = Math.random() * 100; // placeholder for now
-            double procCount = Math.random() * 300; // simulated for demo
+        cpuLabel.setText(String.format("CPU Usage: %.1f%%", cpu));
+        ramLabel.setText(String.format("Memory Used: %.1f%%", ram));
+        diskLabel.setText(String.format("Disk Read/Write: %.1f / %.1f MB/s", diskR, diskW));
+        netLabel.setText(String.format("Network Sent/Recv: %.1f / %.1f KB/s", netS, netR));
+        procLabel.setText(String.format("Process Count: %d", proc));
 
-            // --- Update labels ---
-            cpuLabel.setText(String.format("CPU: %.1f%%", cpu));
-            ramLabel.setText(String.format("RAM: %.1f%% (%.2f / %.2f GB)", ram, usedMem, totalMem));
-            diskLabel.setText(String.format("Disk: %.2f MB/s", diskRead));
-            netLabel.setText(String.format("Network: ↑%.1fKB/s ↓%.1fKB/s", netSent, netRecv));
-            procLabel.setText(String.format("Processes: %.0f", procCount));
-
-            // --- Call Python model via bridge ---
-            Map<String, Object> result = AnomalyBridge.runModel();
-            boolean anomaly = Boolean.TRUE.equals(result.get("anomaly"));
-            boolean mlFlag = Boolean.TRUE.equals(result.get("ml_flag"));
-
-            // --- Update UI colors & messages ---
-            if (anomaly) {
-                statusLabel.setText("⚠️ Anomaly Detected");
-                statusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
-                alertSourceLabel.setText(mlFlag ? "Alert Source: ML Model" : "Alert Source: Statistical Baseline");
-            } else {
-                statusLabel.setText("✅ Normal");
-                statusLabel.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
-                alertSourceLabel.setText("Alert Source: --");
-            }
-
-        } catch (Exception ex) {
-            statusLabel.setText("⚠️ Error: " + ex.getMessage());
-            statusLabel.setStyle("-fx-text-fill: orange;");
-            alertSourceLabel.setText("Alert Source: --");
+        if (anomaly) {
+            statusLabel.setText("🚨 Anomaly Detected!");
+            statusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+            enableFeedbackButtons();
+        } else {
+            statusLabel.setText("✅ Normal");
+            statusLabel.setStyle("-fx-text-fill: green;");
+            trueButton.setDisable(true);
+            falseButton.setDisable(true);
         }
+    }
+
+    private void enableFeedbackButtons() {
+        trueButton.setDisable(false);
+        falseButton.setDisable(false);
+
+        trueButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white;");
+        falseButton.setStyle("-fx-background-color: #dc3545; -fx-text-fill: white;");
+
+        PauseTransition delay = new PauseTransition(Duration.seconds(15));
+        delay.setOnFinished(e -> {
+            trueButton.setDisable(true);
+            falseButton.setDisable(true);
+            trueButton.setStyle("");
+            falseButton.setStyle("");
+        });
+        delay.play();
+    }
+
+    @FXML
+    private void onTrueAnomaly() {
+        logFeedback("TRUE");
+        hintLabel.setText("✔️ Logged: TRUE");
+    }
+
+    @FXML
+    private void onFalseAlarm() {
+        logFeedback("FALSE");
+        hintLabel.setText("❌ Logged: FALSE");
+    }
+
+    @FXML private Label connLabel;
+    public void setConnectionStatus(boolean connected) {
+        if (connected) {
+            connLabel.setText("🟢 Connected");
+            connLabel.setStyle("-fx-text-fill: green;");
+        } else {
+            connLabel.setText("🔴 Disconnected");
+            connLabel.setStyle("-fx-text-fill: red;");
+        }
+    }
+
+
+    private void logFeedback(String userLabel) {
+        if (lastMetrics == null) return;
+
+        double cpu = ((Number) lastMetrics.getOrDefault("cpu", 0)).doubleValue();
+        double ram = ((Number) lastMetrics.getOrDefault("ram", 0)).doubleValue();
+        double diskR = ((Number) lastMetrics.getOrDefault("disk_read", 0)).doubleValue();
+        double diskW = ((Number) lastMetrics.getOrDefault("disk_write", 0)).doubleValue();
+        double netS = ((Number) lastMetrics.getOrDefault("net_sent", 0)).doubleValue();
+        double netR = ((Number) lastMetrics.getOrDefault("net_recv", 0)).doubleValue();
+        int proc = ((Number) lastMetrics.getOrDefault("proc", 0)).intValue();
+        boolean predicted = (boolean) lastMetrics.getOrDefault("anomaly", false);
+
+        String ts = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String row = String.format("%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%b,%s\n",
+                ts, cpu, ram, diskR, diskW, netS, netR, proc, predicted, userLabel);
+
+        try (FileWriter fw = new FileWriter(feedbackFile, true)) {
+            fw.write(row);
+        } catch (IOException e) {
+            System.err.println("⚠️ Error writing feedback: " + e.getMessage());
+        }
+
+        System.out.println("📘 Logged feedback: " + row.trim());
     }
 }
