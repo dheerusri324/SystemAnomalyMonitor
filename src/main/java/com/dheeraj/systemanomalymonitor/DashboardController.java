@@ -23,6 +23,11 @@ public class DashboardController {
 
     private Map<String, Object> lastMetrics;
     private final File feedbackFile;
+    private boolean feedbackActive = false;
+    private PauseTransition feedbackTimer;
+    private boolean feedbackSubmitted = false;
+
+
 
     public DashboardController() {
         feedbackFile = new File("src/main/python/feedback_log.csv");
@@ -56,46 +61,61 @@ public class DashboardController {
         netLabel.setText(String.format("Network Sent/Recv: %.1f / %.1f KB/s", netS, netR));
         procLabel.setText(String.format("Process Count: %d", proc));
 
-        if (anomaly) {
+        if (anomaly && !feedbackSubmitted) {
             statusLabel.setText("🚨 Anomaly Detected!");
             statusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
             enableFeedbackButtons();
         } else {
             statusLabel.setText("✅ Normal");
             statusLabel.setStyle("-fx-text-fill: green;");
-            trueButton.setDisable(true);
-            falseButton.setDisable(true);
+            disableFeedbackButtons();
         }
+
     }
 
     private void enableFeedbackButtons() {
+        feedbackSubmitted = false; // reset ONLY once per anomaly
+
         trueButton.setDisable(false);
         falseButton.setDisable(false);
 
         trueButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white;");
         falseButton.setStyle("-fx-background-color: #dc3545; -fx-text-fill: white;");
 
-        PauseTransition delay = new PauseTransition(Duration.seconds(15));
-        delay.setOnFinished(e -> {
-            trueButton.setDisable(true);
-            falseButton.setDisable(true);
-            trueButton.setStyle("");
-            falseButton.setStyle("");
-        });
-        delay.play();
+        if (feedbackTimer != null) {
+            feedbackTimer.stop();
+        }
+
+        feedbackTimer = new PauseTransition(Duration.seconds(15));
+        feedbackTimer.setOnFinished(e -> disableFeedbackButtons());
+        feedbackTimer.play();
     }
+
+
+
 
     @FXML
     private void onTrueAnomaly() {
+        if (feedbackSubmitted) return; // 🚫 HARD STOP
+
+        feedbackSubmitted = true;
         logFeedback("TRUE");
         hintLabel.setText("✔️ Logged: TRUE");
+
+        disableFeedbackButtons();
     }
 
     @FXML
     private void onFalseAlarm() {
+        if (feedbackSubmitted) return; // 🚫 HARD STOP
+
+        feedbackSubmitted = true;
         logFeedback("FALSE");
         hintLabel.setText("❌ Logged: FALSE");
+
+        disableFeedbackButtons();
     }
+
 
     @FXML private Label connLabel;
     public void setConnectionStatus(boolean connected) {
@@ -107,6 +127,14 @@ public class DashboardController {
             connLabel.setStyle("-fx-text-fill: red;");
         }
     }
+
+    private void disableFeedbackButtons() {
+        trueButton.setDisable(true);
+        falseButton.setDisable(true);
+        trueButton.setStyle("");
+        falseButton.setStyle("");
+    }
+
 
 
     private void logFeedback(String userLabel) {

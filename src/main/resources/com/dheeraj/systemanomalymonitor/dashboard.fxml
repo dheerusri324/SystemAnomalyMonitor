@@ -1,31 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
-<?import javafx.scene.control.Label?>
-<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
 
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.control.Separator?>
-<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.dheeraj.systemanomalymonitor.DashboardController"
-      alignment="CENTER" spacing="12" style="-fx-padding: 30; -fx-background-color: #f8f9fa;">
+<VBox fx:controller="com.dheeraj.systemanomalymonitor.DashboardController"
+      xmlns:fx="http://javafx.com/fxml"
+      spacing="12" alignment="CENTER" style="-fx-padding:20">
+    <Label text=" System Anomaly Monitor" style="-fx-font-size:18; -fx-font-weight:bold;" />
+    <Label fx:id="cpuLabel" text="CPU Usage: 0%" />
+    <Label fx:id="ramLabel" text="Memory Used: 0 GB" />
+    <Label fx:id="diskLabel" text="Disk Read/Write: 0 / 0 MB/s" />
+    <Label fx:id="netLabel" text="Network Sent/Recv: 0 / 0 KB/s" />
+    <Label fx:id="procLabel" text="Process Count: 0" />
+    <Label fx:id="statusLabel" text="Status: —" style="-fx-font-weight:bold;" />
 
-    <Label text="🧠 System Anomaly Monitor"
-           style="-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #333;" />
-
-    <Label fx:id="cpuLabel" text="CPU: --%" style="-fx-font-size: 16px;" />
-    <Label fx:id="ramLabel" text="RAM: --%" style="-fx-font-size: 16px;" />
-    <Label fx:id="diskLabel" text="Disk: -- MB/s" style="-fx-font-size: 16px;" />
-    <Label fx:id="netLabel" text="Network: ↑--KB/s ↓--KB/s" style="-fx-font-size: 16px;" />
-    <Label fx:id="procLabel" text="Processes: --" style="-fx-font-size: 16px;" />
-
-    <Separator prefWidth="300"/>
-
-    <Label fx:id="statusLabel" text="Status: --"
-           style="-fx-font-size: 18px; -fx-font-weight: bold;" />
-    <Label fx:id="alertSourceLabel" text="Alert Source: --"
-           style="-fx-font-size: 14px; -fx-text-fill: #555;" />
+    <HBox spacing="10" alignment="CENTER" style="-fx-padding:8;">
+        <Button fx:id="trueButton" text="✅ True Anomaly" onAction="#onTrueAnomaly" disable="true"/>
+        <Button fx:id="falseButton" text="❌ False Alarm" onAction="#onFalseAlarm" disable="true"/>
+    </HBox>
+    <Label fx:id="hintLabel" text="Tip: Click to label alerts for training" style="-fx-font-size:11"/>
+    <Label fx:id="connLabel" text="🔴 Disconnected" style="-fx-text-fill: gray;"/>
 
 </VBox>
-
-
