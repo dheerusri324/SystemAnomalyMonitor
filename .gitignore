@@ -55,6 +55,7 @@ venv/
 .venv1/
 venv1/iforest_model.joblib
 system_metrics.csv
+feedback_log.csv
 __pycache__/
 *.pyc
 *.log
