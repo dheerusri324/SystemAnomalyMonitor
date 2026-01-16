@@ -26,6 +26,8 @@ public class DashboardController {
     private boolean feedbackActive = false;
     private PauseTransition feedbackTimer;
     private boolean feedbackSubmitted = false;
+    private boolean lastAnomalyActive = false;
+
 
 
 
@@ -52,8 +54,24 @@ public class DashboardController {
         double diskW = ((Number) metrics.getOrDefault("disk_write", 0)).doubleValue();
         double netS = ((Number) metrics.getOrDefault("net_sent", 0)).doubleValue();
         double netR = ((Number) metrics.getOrDefault("net_recv", 0)).doubleValue();
+        double confidence = ((Number) metrics.getOrDefault("confidence", 0)).doubleValue();
         int proc = ((Number) metrics.getOrDefault("proc", 0)).intValue();
         boolean anomaly = (Boolean) metrics.getOrDefault("anomaly", false);
+        Object reasonsObj = metrics.get("reasons");
+        String reasonText = "";
+
+        if (reasonsObj instanceof java.util.List<?>) {
+            @SuppressWarnings("unchecked")
+            var reasons = (java.util.List<String>) reasonsObj;
+
+            if (!reasons.isEmpty()) {
+                reasonText = String.join("\n• ", reasons);
+                reasonText = "• " + reasonText;
+            }
+        }
+
+
+
 
         cpuLabel.setText(String.format("CPU Usage: %.1f%%", cpu));
         ramLabel.setText(String.format("Memory Used: %.1f%%", ram));
@@ -61,15 +79,48 @@ public class DashboardController {
         netLabel.setText(String.format("Network Sent/Recv: %.1f / %.1f KB/s", netS, netR));
         procLabel.setText(String.format("Process Count: %d", proc));
 
-        if (anomaly && !feedbackSubmitted) {
-            statusLabel.setText("🚨 Anomaly Detected!");
+        boolean isHighAnomaly = confidence >= 60;
+        boolean isSuspicious = confidence >= 40 && confidence < 60;
+
+// 🔁 Detect NEW anomaly (transition)
+        if (isHighAnomaly && !lastAnomalyActive) {
+            feedbackSubmitted = false;   // reset ONLY on new anomaly
+        }
+
+// ---------- UI Logic ----------
+        if (isHighAnomaly && !feedbackSubmitted) {
+            statusLabel.setText(
+                    String.format("🚨 Anomaly (High confidence: %.0f%%)", confidence)
+            );
             statusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+
+            if (!reasonText.isEmpty()) {
+                hintLabel.setText(reasonText);
+            } else {
+                hintLabel.setText("Please confirm if this alert is correct");
+            }
+
             enableFeedbackButtons();
+
+        } else if (isSuspicious) {
+            statusLabel.setText(
+                    String.format("⚠️ Suspicious (Confidence: %.0f%%)", confidence)
+            );
+            statusLabel.setStyle("-fx-text-fill: orange; -fx-font-weight: bold;");
+            hintLabel.setText("Monitoring system behavior…");
+            disableFeedbackButtons();
+
         } else {
-            statusLabel.setText("✅ Normal");
+            statusLabel.setText(
+                    String.format("✅ Normal (Confidence: %.0f%%)", confidence)
+            );
             statusLabel.setStyle("-fx-text-fill: green;");
+            hintLabel.setText("System operating within normal range");
             disableFeedbackButtons();
         }
+
+// update memory
+        lastAnomalyActive = isHighAnomaly;
 
     }
 

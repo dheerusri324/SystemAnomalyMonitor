@@ -10,6 +10,8 @@ import joblib
 import os
 from datetime import datetime, timedelta
 from collections import deque
+from feedback_trainer import retrain_with_feedback
+
 
 HOST = "127.0.0.1"
 PORT = 5055
@@ -48,13 +50,21 @@ def detect_anomaly(model):
         "process_count": proc
     }])
 
+    # --- ML model prediction with confidence ---
     ml_flag = False
+    confidence = 0.0
+
     try:
-        pred_label = model.predict(X)[0]
-        ml_flag = bool(int(pred_label) == -1)
+        score = model.decision_function(X)[0]   # higher = normal
+        # Convert score → confidence (0–100)
+        # Typical IF scores are in range ~[-0.2, 0.2]
+        confidence = max(0.0, min(1.0, (0.2 - score) / 0.4))
+        confidence = round(confidence * 100, 2)
+
+        ml_flag = score < 0
     except Exception as e:
         print("⚠ Prediction error:", e)
-        ml_flag = False
+
 
     cpu_spike = False
     ram_spike = False
@@ -64,7 +74,21 @@ def detect_anomaly(model):
         cpu_spike = abs(cpu - cpu_mean) > 1.2 * cpu_std
         ram_spike = abs(ram - ram_mean) > 1.2 * ram_std
 
-    anomaly = ml_flag or cpu_spike or ram_spike or FORCE_ANOMALY
+    reasons = []
+
+    if cpu_spike:
+        reasons.append("CPU spike above normal")
+
+    if ram_spike:
+        reasons.append("High memory deviation")
+
+    if confidence >= 0.8:
+        reasons.append("ML confidence very high")
+    elif confidence >= 0.5:
+        reasons.append("Moderate anomaly confidence")
+
+
+    anomaly = (confidence >= 60) or cpu_spike or ram_spike or FORCE_ANOMALY
 
     try:
         row = {
@@ -85,7 +109,8 @@ def detect_anomaly(model):
 
     return {
         "anomaly": bool(anomaly),
-        "ml_flag": bool(ml_flag),
+        "confidence": float(confidence),
+        "reasons": reasons,
         "cpu": float(round(cpu, 2)),
         "ram": float(round(ram, 2)),
         "disk_read": float(round(disk.read_bytes / (1024 * 1024), 2)),
@@ -94,7 +119,6 @@ def detect_anomaly(model):
         "net_recv": float(round(net.bytes_recv / 1024, 2)),
         "proc": int(proc)
     }
-
 
 # --- Background cleanup thread ----------------------------------------------
 def cleanup_old_data():
@@ -140,11 +164,8 @@ def auto_retrain():
                         "disk_write_MBps", "net_sent_KBps", "net_recv_KBps",
                         "process_count"
                     ]]
-                    model = IsolationForest(contamination=0.10, random_state=42)
-                    model.fit(X)
-
-                    with lock:
-                        joblib.dump(model, MODEL_PATH)
+                    retrain_with_feedback()
+                    last_size = current_size
 
                     print("✅ Model retrained and saved.")
                     last_size = current_size
